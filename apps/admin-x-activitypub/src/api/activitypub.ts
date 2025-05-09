@@ -67,7 +67,7 @@ export type AccountFollowsType = 'following' | 'followers';
 
 type GetAccountResponse = Account
 
-export type FollowAccount = Pick<Account, 'id' | 'name' | 'handle' | 'avatarUrl'> & {isFollowing: true};
+export type FollowAccount = Pick<Account, 'id' | 'name' | 'handle' | 'avatarUrl' | 'blockedByMe' | 'domainBlockedByMe'> & {isFollowing: true};
 
 export interface GetAccountFollowsResponse {
     accounts: FollowAccount[];
@@ -277,16 +277,10 @@ export class ActivityPubAPI {
         return response;
     }
 
-    async noteNew(content: string, imageUrl?: string): Promise<Post> {
+    async note(content: string, imageUrl?: string): Promise<Post> {
         const url = new URL('.ghost/activitypub/actions/note', this.apiUrl);
         const response = await this.fetchJSON(url, 'POST', {content, imageUrl});
         return (response as {post: Post}).post;
-    }
-
-    async note(content: string, imageUrl?: string): Promise<Activity> {
-        const url = new URL('.ghost/activitypub/actions/note', this.apiUrl);
-        const response = await this.fetchJSON(url, 'POST', {content, imageUrl});
-        return response;
     }
 
     async delete(id: string): Promise<void> {

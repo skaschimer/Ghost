@@ -23,7 +23,6 @@ import {formatPendingActivityContent, generatePendingActivity, generatePendingAc
 import {mapPostToActivity} from '../utils/posts';
 import {showToast} from '@tryghost/admin-x-design-system';
 import {useCallback} from 'react';
-import {useFeatureFlags} from '../lib/feature-flags';
 
 export type ActivityPubCollectionQueryResult<TData> = UseInfiniteQueryResult<ActivityPubCollectionResponse<TData>>;
 export type AccountFollowsQueryResult = UseInfiniteQueryResult<GetAccountFollowsResponse>;
@@ -383,6 +382,8 @@ export function useBlockMutationForUser(handle: string) {
                     };
                 }
             );
+            queryClient.invalidateQueries({queryKey: QUERY_KEYS.feed});
+            queryClient.invalidateQueries({queryKey: QUERY_KEYS.inbox});
         }
     });
 }
@@ -747,6 +748,7 @@ export function useSearchForUser(handle: string, query: string) {
     const searchQuery = useQuery({
         queryKey,
         enabled: query.length > 0,
+        refetchOnMount: 'always',
         async queryFn() {
             const siteUrl = await getSiteUrl();
             const api = createActivityPubAPI(handle, siteUrl);
@@ -1227,7 +1229,6 @@ export function useReplyMutationForUser(handle: string, actorProps?: ActorProper
 
 export function useNoteMutationForUser(handle: string, actorProps?: ActorProperties) {
     const queryClient = useQueryClient();
-    const {isEnabled} = useFeatureFlags();
     const queryKeyFeed = QUERY_KEYS.feed;
     const queryKeyOutbox = QUERY_KEYS.outbox(handle);
     const queryKeyPostsByAccount = QUERY_KEYS.profilePosts('index');
@@ -1237,11 +1238,7 @@ export function useNoteMutationForUser(handle: string, actorProps?: ActorPropert
             const siteUrl = await getSiteUrl();
             const api = createActivityPubAPI(handle, siteUrl);
 
-            if (isEnabled('new-note-format')) {
-                return api.noteNew(content, imageUrl);
-            } else {
-                return api.note(content, imageUrl);
-            }
+            return api.note(content, imageUrl);
         },
         onMutate: ({content, imageUrl}) => {
             if (!actorProps) {
@@ -1261,26 +1258,15 @@ export function useNoteMutationForUser(handle: string, actorProps?: ActorPropert
 
             return {id};
         },
-        onSuccess: (postOrActivity: Post | Activity, _variables, context) => {
-            if (postOrActivity.id === undefined) {
+        onSuccess: (post: Post, _variables, context) => {
+            if (post.id === undefined) {
                 throw new Error('Post returned from API has no id');
             }
+            const activity = mapPostToActivity(post);
 
-            if (isEnabled('new-note-format')) {
-                const post = postOrActivity as Post;
-                const activity = mapPostToActivity(post);
-
-                updateActivityInPaginatedCollection(queryClient, queryKeyFeed, 'posts', context?.id ?? '', () => activity);
-                updateActivityInPaginatedCollection(queryClient, queryKeyOutbox, 'data', context?.id ?? '', () => activity);
-                updateActivityInPaginatedCollection(queryClient, queryKeyPostsByAccount, 'posts', context?.id ?? '', () => activity);
-            } else {
-                const activity = postOrActivity as Activity;
-                const preparedActivity = prepareNewActivity(activity);
-
-                updateActivityInPaginatedCollection(queryClient, queryKeyFeed, 'posts', context?.id ?? '', () => preparedActivity);
-                updateActivityInPaginatedCollection(queryClient, queryKeyOutbox, 'data', context?.id ?? '', () => preparedActivity);
-                updateActivityInPaginatedCollection(queryClient, queryKeyPostsByAccount, 'posts', context?.id ?? '', () => preparedActivity);
-            }
+            updateActivityInPaginatedCollection(queryClient, queryKeyFeed, 'posts', context?.id ?? '', () => activity);
+            updateActivityInPaginatedCollection(queryClient, queryKeyOutbox, 'data', context?.id ?? '', () => activity);
+            updateActivityInPaginatedCollection(queryClient, queryKeyPostsByAccount, 'posts', context?.id ?? '', () => activity);
         },
         onError(error, _variables, context) {
             // eslint-disable-next-line no-console
