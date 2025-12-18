@@ -7,8 +7,6 @@ import {
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-    Avatar,
-    AvatarFallback,
     Button,
     DropdownMenu,
     DropdownMenuContent,
@@ -25,12 +23,14 @@ import {
     TooltipContent,
     TooltipProvider,
     TooltipTrigger,
+    cn,
     formatNumber,
     formatTimestamp
 } from '@tryghost/shade';
 import {Comment, useDeleteComment, useHideComment, useShowComment} from '@tryghost/admin-x-framework/api/comments';
 import {forwardRef, useEffect, useRef, useState} from 'react';
 import {useInfiniteVirtualScroll} from '@components/virtual-table/use-infinite-virtual-scroll';
+import {useScrollRestoration} from '@components/virtual-table/use-scroll-restoration';
 
 const SpacerRow = ({height}: { height: number }) => (
     <tr aria-hidden="true" className="flex lg:table-row">
@@ -109,7 +109,14 @@ function CommentContent({item}: {item: Comment}) {
                 <div
                     dangerouslySetInnerHTML={{__html: item.html || ''}}
                     ref={contentRef}
-                    className={`prose flex-1 text-base leading-[1.45em] ${isExpanded ? '-mb-1 [&_p]:mb-[0.85em]' : 'line-clamp-2 [&_*]:m-0 [&_*]:inline'} ${item.status === 'hidden' && 'text-muted-foreground'}`}
+                    className={cn(
+                        'prose flex-1 text-base leading-[1.45em] [&_*]:text-base [&_*]:font-normal [&_blockquote]:border-l-[3px] [&_blockquote]:border-foreground [&_blockquote]:p-0 [&_blockquote]:pl-3 [&_blockquote_p]:mt-0 [&_a]:underline',
+                        (isExpanded ?
+                            '-mb-1 [&_p]:mb-[0.85em]'
+                            :
+                            'line-clamp-2 [&_p]:m-0 [&_blockquote+p]:mt-1'),
+                        (item.status === 'hidden' && 'text-muted-foreground [&_blockquote]:border-foreground-muted')
+                    )}
                 />
                 {isClamped && (
                     <ExpandButton expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)} />
@@ -125,7 +132,8 @@ function CommentsList({
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    onAddFilter
+    onAddFilter,
+    isLoading
 }: {
     items: Comment[];
     totalItems: number;
@@ -133,8 +141,13 @@ function CommentsList({
     isFetchingNextPage?: boolean;
     fetchNextPage: () => void;
     onAddFilter: (field: string, value: string, operator?: string) => void;
+    isLoading?: boolean;
 }) {
     const parentRef = useRef<HTMLDivElement>(null);
+    
+    // Restore scroll position when navigating back from filtered views
+    useScrollRestoration({parentRef, isLoading});
+    
     const {visibleItems, spaceBefore, spaceAfter} = useInfiniteVirtualScroll({
         items,
         totalItems,
@@ -197,14 +210,15 @@ function CommentsList({
                                                             onAddFilter('author', item.member!.id);
                                                         }}
                                                     >
-                                                        <Avatar className={`size-5 ${item.status === 'hidden' && 'opacity-40'}`}>
-                                                            {/* {item.member.avatar_image && (
-                                                                <AvatarImage alt={item.member.name} src={item.member.avatar_image} />
-                                                            )} */}
-                                                            <AvatarFallback>
+                                                        {/* TODO: replace temporary avatar with Avatar component once fallback is handled */}
+                                                        <div className='relative flex size-5 items-center justify-center overflow-hidden rounded-full bg-accent'>
+                                                            {item.member.avatar_image && (
+                                                                <div className='absolute inset-0'><img src={item.member.avatar_image} /></div>
+                                                            )}
+                                                            <div>
                                                                 <LucideIcon.User className='!size-3 text-muted-foreground' size={12} />
-                                                            </AvatarFallback>
-                                                        </Avatar>
+                                                            </div>
+                                                        </div>
                                                         {item.member.name || 'Unknown'}
                                                     </Button>
                                                 </>
@@ -304,8 +318,8 @@ function CommentsList({
                                                 <TooltipProvider>
                                                     <Tooltip>
                                                         <TooltipTrigger asChild>
-                                                            <div className={`ml-2 flex items-center gap-1 text-xs ${item.count?.reports ? 'text-yellow-600' : 'text-muted-foreground/70'}`}>
-                                                                <LucideIcon.TriangleAlert size={16} strokeWidth={1.5} />
+                                                            <div className={`ml-2 flex items-center gap-1 text-xs ${item.count?.reports ? 'font-medium text-yellow-600 dark:text-yellow' : 'text-muted-foreground/70'}`}>
+                                                                <LucideIcon.TriangleAlert size={16} strokeWidth={(item.count?.reports ? 1.75 : 1.5)} />
                                                                 <span>{formatNumber(item.count?.reports)}</span>
                                                             </div>
                                                         </TooltipTrigger>
